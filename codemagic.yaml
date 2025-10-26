@@ -6,21 +6,12 @@ workflows:
         PONS_API_KEY: $PONS_API_KEY
 
     scripts:
-      - name: Install dependencies
-        script: |
-          echo "No extra dependencies for pure SwiftUI project"
       - name: Build iOS
         script: |
           xcodebuild -workspace ios/LinguaReader.xcworkspace \
                      -scheme LinguaReaderApp \
                      -sdk iphoneos \
                      -configuration Release clean build
-      - name: Export IPA
-        script: |
-          mkdir -p build/ipa
-          xcodebuild -exportArchive \
-                     -archivePath build/LinguaReaderApp.xcarchive \
-                     -exportOptionsPlist ios/ExportOptions.plist \
-                     -exportPath build/ipa
+
 artifacts:
   - build/ipa/*.ipa
