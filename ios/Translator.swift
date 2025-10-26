@@ -7,7 +7,8 @@ actor Translator {
     
     // PONS API
     private let ponsEndpoint = "https://api.pons.com/v1/dictionary"
-    private let ponsAuthKey = "<YOUR_PONS_API_KEY>" // <-- Reemplaza con tu clave en Xcode's config or env
+    private let ponsAuthKey = ProcessInfo.processInfo.environment["PONS_API_KEY"] ?? ""
+
 
     func translate(_ text: String) async -> (String, String) {
         if let cached = VocabCache.shared.lookup(text) {
