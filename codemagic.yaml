@@ -3,9 +3,7 @@ workflows:
     name: iOS LinguaReader
     environment:
       vars:
-        PONS_API_KEY:
-          value: $PONS_API_KEY
-          is_secure: true
+        PONS_API_KEY: $PONS_API_KEY
 
     scripts:
       - name: Install dependencies
