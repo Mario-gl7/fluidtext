@@ -1,41 +1,28 @@
 workflows:
   ios-linguareader:
-    name: Build LinguaReader iOS
+    name: iOS Linguareader
     max_build_duration: 60
     environment:
       vars:
-        PONS_API_KEY: EnvironVar  # Variable privada de Codemagic
-      xcode: latest
-      cocoapods: default
-      flutter: false
+        PONS_API_KEY:
+          value: $PONS_API_KEY
+          is_secure: true
     scripts:
-      - name: Debug environment
+      - name: Install dependencies
         script: |
-          echo "Branch: $CM_BRANCH"
-          echo "Using PONS_API_KEY: $PONS_API_KEY"
-      - name: Navigate to iOS folder
-        script: cd ios
-      - name: Install pods
+          echo "No extra dependencies for pure SwiftUI project"
+      - name: Build iOS
         script: |
-          if [ -f Podfile ]; then
-            pod install
-          else
-            echo "No Podfile, skipping pod install"
-          fi
-      - name: Build iOS app
+          xcodebuild -workspace ios/LinguaReader.xcworkspace \
+                     -scheme LinguaReaderApp \
+                     -sdk iphoneos \
+                     -configuration Release clean build
+      - name: Export IPA
         script: |
-          xcodebuild \
-            -workspace ios/LinguaReaderApp.xcworkspace \
-            -scheme LinguaReaderApp \
-            -sdk iphoneos \
-            -configuration Release \
-            CODE_SIGN_IDENTITY="" \
-            CODE_SIGNING_REQUIRED=NO \
-            build
-    artifacts:
-      - ios/build/**/*.app
-    publishing:
-      email:
-        recipients:
-          - your_email@example.com
-
+          mkdir -p build/ipa
+          xcodebuild -exportArchive \
+                     -archivePath build/LinguaReaderApp.xcarchive \
+                     -exportOptionsPlist ios/ExportOptions.plist \
+                     -exportPath build/ipa
+artifacts:
+  - build/ipa/*.ipa
