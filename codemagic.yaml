@@ -1,12 +1,12 @@
 workflows:
   ios-linguareader:
-    name: iOS Linguareader
-    max_build_duration: 60
+    name: iOS LinguaReader
     environment:
       vars:
         PONS_API_KEY:
           value: $PONS_API_KEY
           is_secure: true
+
     scripts:
       - name: Install dependencies
         script: |
