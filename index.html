@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Immersive Reader PRO</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/epubjs/dist/epub.min.js"></script>
   <style>
     body { background: linear-gradient(180deg, #f7f9fc 0%, #e3eaf5 100%); font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif; }
     #translationPopup { position: absolute; display: none; background: rgba(255,255,255,0.95); backdrop-filter: blur(10px); border: 1px solid #d0d0d0; border-radius: 1rem; padding: 1rem; z-index: 1000; box-shadow: 0 10px 25px rgba(0,0,0,0.1); }
@@ -19,75 +21,213 @@
   <header class="bg-blue-500 text-white p-4 flex justify-between items-center shadow-md rounded-b-2xl">
     <h1 class="text-2xl font-semibold tracking-tight">📘 Immersive Reader PRO</h1>
     <div class="flex gap-2 items-center">
+      <input id="fileInput" type="file" accept=".txt,.pdf,.epub" class="text-sm bg-white text-gray-700 rounded-lg px-2 py-1" />
+      <button id="translateAllBtn" class="bg-yellow-400 text-black font-semibold px-3 py-1 rounded-lg hover:bg-yellow-300">Translate Text</button>
       <button id="studyModeBtn" class="bg-green-500 text-white font-semibold px-3 py-1 rounded-lg hover:bg-green-400">Study Mode</button>
     </div>
   </header>
 
-  <main id="studySection" class="p-6 flex flex-col items-center justify-center">
-    <h2 class="text-2xl font-bold mb-4">🎮 Vocabulary Game Mode</h2>
-    <div id="xpDisplay" class="text-xl font-semibold mb-2">XP: 0 | 🔥 Streak: 0</div>
-    <div id="gameCard" class="ios-card text-center p-8">
-      <p id="gameQuestion" class="text-xl font-semibold mb-4">Loading...</p>
-      <div id="gameOptions" class="flex flex-wrap justify-center gap-4"></div>
+  <section id="librarySection" class="p-4 border-b border-gray-200">
+    <h2 class="text-xl font-bold mb-2">📚 Saved Texts</h2>
+    <div id="libraryList" class="flex flex-wrap gap-3"></div>
+  </section>
+
+  <main id="reader" class="p-6 overflow-y-auto flex-1"></main>
+
+  <section id="studySection" class="p-6 hidden">
+    <h2 class="text-2xl font-bold mb-4">Vocabulary Study</h2>
+    <div id="flashcard" class="ios-card text-center cursor-pointer select-none">
+      <p id="flashWord" class="text-2xl font-semibold"></p>
+      <p id="flashTrans" class="text-lg text-gray-500 hidden"></p>
     </div>
-    <div id="result" class="mt-4 text-lg font-semibold"></div>
-    <button id="nextQuestion" class="bg-blue-500 text-white px-4 py-2 mt-4 rounded-lg">Next</button>
-  </main>
+    <div class="flex justify-center mt-4 gap-4">
+      <button id="nextCard" class="bg-blue-500 text-white px-4 py-2 rounded-lg">Next</button>
+      <button id="clearVocab" class="bg-red-500 text-white px-4 py-2 rounded-lg">Clear Saved Words</button>
+    </div>
+  </section>
+
+  <div id="translationPopup"></div>
 
   <script>
+    const fileInput = document.getElementById('fileInput');
+    const readerDiv = document.getElementById('reader');
+    const libraryList = document.getElementById('libraryList');
+    const translateAllBtn = document.getElementById('translateAllBtn');
+    const popup = document.getElementById('translationPopup');
+    const studyModeBtn = document.getElementById('studyModeBtn');
+    const studySection = document.getElementById('studySection');
+    const flashcard = document.getElementById('flashcard');
+    const flashWord = document.getElementById('flashWord');
+    const flashTrans = document.getElementById('flashTrans');
+    const nextCard = document.getElementById('nextCard');
+    const clearVocab = document.getElementById('clearVocab');
+
     let vocabulary = JSON.parse(localStorage.getItem('vocab') || '[]');
-    let xp = parseInt(localStorage.getItem('xp') || '0');
-    let streak = parseInt(localStorage.getItem('streak') || '0');
-    let currentQuestion = null;
+    let library = JSON.parse(localStorage.getItem('library') || '[]');
+    let currentIndex = 0;
+    let currentBook = null;
 
-    const xpDisplay = document.getElementById('xpDisplay');
-    const gameQuestion = document.getElementById('gameQuestion');
-    const gameOptions = document.getElementById('gameOptions');
-    const result = document.getElementById('result');
-    const nextQuestion = document.getElementById('nextQuestion');
+    function renderLibrary() {
+      libraryList.innerHTML = library.map((b, i) => `<button class='bg-gray-100 hover:bg-gray-200 rounded-lg px-3 py-2' onclick='loadBook(${i})'>${b.name}</button>`).join('');
+    }
+    renderLibrary();
 
-    function updateXPDisplay() {
-      xpDisplay.textContent = `XP: ${xp} | 🔥 Streak: ${streak}`;
-      localStorage.setItem('xp', xp);
-      localStorage.setItem('streak', streak);
+    function saveLibrary() { localStorage.setItem('library', JSON.stringify(library)); }
+
+    async function handleFile(file) {
+      const name = file.name;
+      if (file.name.endsWith('.txt')) {
+        const text = await file.text();
+        addBook(name, text);
+      } else if (file.name.endsWith('.pdf')) {
+        const pdf = await pdfjsLib.getDocument(await file.arrayBuffer()).promise;
+        let fullText = '';
+        for (let i = 1; i <= pdf.numPages; i++) {
+          const page = await pdf.getPage(i);
+          const content = await page.getTextContent();
+          fullText += content.items.map(item => item.str).join(' ') + '\n';
+        }
+        addBook(name, fullText);
+      } else if (file.name.endsWith('.epub')) {
+        const book = ePub(file);
+        const text = await book.loaded.spine.then(spine => Promise.all(spine.items.map(i => i.load())).then(items => items.map(i => i.document.body.innerText).join('\n')));
+        addBook(name, text);
+      }
     }
 
-    function generateQuestion() {
-      if (vocabulary.length < 4) {
-        gameQuestion.textContent = 'Add more words to your vocabulary to start playing!';
+    fileInput.addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (file) await handleFile(file);
+    });
+
+    function addBook(name, content) {
+      library.push({ name, content, progress: 0 });
+      saveLibrary();
+      renderLibrary();
+    }
+
+    window.loadBook = function(i) {
+      currentBook = library[i];
+      displayBook(currentBook);
+    }
+
+    function displayBook(book) {
+      const lines = book.content.split(/\n+/);
+      readerDiv.innerHTML = lines.map((line, idx) => {
+        const words = line.split(/(\s+)/).map(w => w.match(/\w+/) ? `<span class='word' data-index='${idx}'>${w}</span>` : w).join('');
+        return `<div class='ios-card line-block' data-line='${idx}'><p class='original-line'>${words}</p><p class='translation-line hidden'></p></div>`;
+      }).join('');
+      attachWordListeners();
+      readerDiv.scrollTop = book.progress || 0;
+    }
+
+    readerDiv.addEventListener('scroll', () => {
+      if (currentBook) {
+        currentBook.progress = readerDiv.scrollTop;
+        saveLibrary();
+      }
+    });
+
+    function attachWordListeners() {
+      document.querySelectorAll('.word').forEach(word => {
+        word.addEventListener('click', async (e) => {
+          const text = e.target.innerText.trim();
+          const rect = e.target.getBoundingClientRect();
+          const translation = await translateWord(text);
+          showPopup(rect, text, translation);
+        });
+      });
+    }
+
+    async function translateWord(word) {
+      try {
+        const res = await fetch(`https://en.pons.com/translate/german-spanish/${encodeURIComponent(word)}`);
+        const html = await res.text();
+        const doc = new DOMParser().parseFromString(html, 'text/html');
+        const transEl = doc.querySelector('.target');
+        const genderEl = doc.querySelector('.genus');
+        const translation = transEl ? transEl.textContent.trim() : 'No translation found';
+        const gender = genderEl ? genderEl.textContent.trim() : '';
+        return { translation, gender };
+      } catch {
+        return { translation: 'Error fetching translation', gender: '' };
+      }
+    }
+
+    function showPopup(rect, word, data) {
+      popup.style.left = `${rect.left + window.scrollX}px`;
+      popup.style.top = `${rect.bottom + window.scrollY + 5}px`;
+      popup.innerHTML = `<strong>${word}</strong><br>${data.translation} ${data.gender ? '(' + data.gender + ')' : ''}<br>
+      <button class='bg-green-500 text-white px-2 py-1 mt-2 rounded saveWord'>Save Word</button>`;
+      popup.style.display = 'block';
+      popup.querySelector('.saveWord').onclick = () => {
+        saveWord(word, data.translation, data.gender);
+        popup.style.display = 'none';
+      };
+    }
+
+    document.addEventListener('click', (e) => {
+      if (!popup.contains(e.target) && !e.target.classList.contains('word')) popup.style.display = 'none';
+    });
+
+    async function translateLine(lineText) {
+      const res = await fetch(`https://en.pons.com/translate/german-spanish/${encodeURIComponent(lineText)}`);
+      const html = await res.text();
+      const doc = new DOMParser().parseFromString(html, 'text/html');
+      const transEl = doc.querySelector('.target');
+      return transEl ? transEl.textContent.trim() : '(no translation found)';
+    }
+
+    translateAllBtn.addEventListener('click', async () => {
+      const lines = document.querySelectorAll('.line-block');
+      for (const block of lines) {
+        const text = block.querySelector('.original-line').innerText.trim();
+        const trans = await translateLine(text);
+        const tline = block.querySelector('.translation-line');
+        tline.textContent = trans;
+        tline.classList.remove('hidden');
+      }
+    });
+
+    function saveWord(word, translation, gender) {
+      vocabulary.push({ word, translation, gender });
+      localStorage.setItem('vocab', JSON.stringify(vocabulary));
+    }
+
+    studyModeBtn.addEventListener('click', () => {
+      studySection.classList.toggle('hidden');
+      readerDiv.classList.toggle('hidden');
+      if (!studySection.classList.contains('hidden')) showCard();
+    });
+
+    function showCard() {
+      if (vocabulary.length === 0) {
+        flashWord.textContent = 'No words saved yet';
+        flashTrans.classList.add('hidden');
         return;
       }
-      const correctIndex = Math.floor(Math.random() * vocabulary.length);
-      const correctWord = vocabulary[correctIndex];
-      currentQuestion = correctWord;
-      const options = [correctWord.translation];
-      while (options.length < 4) {
-        const random = vocabulary[Math.floor(Math.random() * vocabulary.length)].translation;
-        if (!options.includes(random)) options.push(random);
-      }
-      options.sort(() => Math.random() - 0.5);
-
-      gameQuestion.textContent = `What is the Spanish translation of "${correctWord.word}"?`;
-      gameOptions.innerHTML = options.map(opt => `<button class='bg-gray-200 hover:bg-blue-300 text-gray-800 px-4 py-2 rounded-lg' onclick='checkAnswer("${opt}")'>${opt}</button>`).join('');
-      result.textContent = '';
+      const entry = vocabulary[currentIndex % vocabulary.length];
+      flashWord.textContent = entry.word;
+      flashTrans.textContent = `${entry.translation} ${entry.gender ? '(' + entry.gender + ')' : ''}`;
+      flashTrans.classList.add('hidden');
     }
 
-    window.checkAnswer = function(answer) {
-      if (!currentQuestion) return;
-      if (answer === currentQuestion.translation) {
-        result.textContent = '✅ Correct!';
-        xp += 10; streak += 1;
-      } else {
-        result.textContent = `❌ Wrong! The correct answer is ${currentQuestion.translation}`;
-        streak = 0;
+    flashcard.addEventListener('click', () => {
+      flashTrans.classList.toggle('hidden');
+    });
+
+    nextCard.addEventListener('click', () => {
+      currentIndex++;
+      showCard();
+    });
+
+    clearVocab.addEventListener('click', () => {
+      if (confirm('Clear all saved words?')) {
+        vocabulary = [];
+        localStorage.removeItem('vocab');
+        showCard();
       }
-      updateXPDisplay();
-    }
-
-    nextQuestion.addEventListener('click', generateQuestion);
-
-    updateXPDisplay();
-    generateQuestion();
+    });
   </script>
 </body>
 </html>
