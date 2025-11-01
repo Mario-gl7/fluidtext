@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Immersive Reader PRO</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { background: linear-gradient(180deg, #f7f9fc 0%, #e3eaf5 100%); font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif; }
+    #translationPopup { position: absolute; display: none; background: rgba(255,255,255,0.95); backdrop-filter: blur(10px); border: 1px solid #d0d0d0; border-radius: 1rem; padding: 1rem; z-index: 1000; box-shadow: 0 10px 25px rgba(0,0,0,0.1); }
+    .ios-card { background: white; border-radius: 1rem; box-shadow: 0 4px 15px rgba(0,0,0,0.1); padding: 1rem; margin-bottom: 1.25rem; transition: transform 0.2s ease; }
+    .ios-card:hover { transform: scale(1.01); }
+    .translation-line { color: #6b7280; font-style: italic; }
+    .word:hover { background-color: #cde8ff; cursor: pointer; border-radius: 4px; }
+    .hidden { display: none; }
+  </style>
+</head>
+<body class="flex flex-col min-h-screen">
+  <header class="bg-blue-500 text-white p-4 flex justify-between items-center shadow-md rounded-b-2xl">
+    <h1 class="text-2xl font-semibold tracking-tight">📘 Immersive Reader PRO</h1>
+    <div class="flex gap-2 items-center">
+      <button id="studyModeBtn" class="bg-green-500 text-white font-semibold px-3 py-1 rounded-lg hover:bg-green-400">Study Mode</button>
+    </div>
+  </header>
+
+  <main id="studySection" class="p-6 flex flex-col items-center justify-center">
+    <h2 class="text-2xl font-bold mb-4">🎮 Vocabulary Game Mode</h2>
+    <div id="xpDisplay" class="text-xl font-semibold mb-2">XP: 0 | 🔥 Streak: 0</div>
+    <div id="gameCard" class="ios-card text-center p-8">
+      <p id="gameQuestion" class="text-xl font-semibold mb-4">Loading...</p>
+      <div id="gameOptions" class="flex flex-wrap justify-center gap-4"></div>
+    </div>
+    <div id="result" class="mt-4 text-lg font-semibold"></div>
+    <button id="nextQuestion" class="bg-blue-500 text-white px-4 py-2 mt-4 rounded-lg">Next</button>
+  </main>
+
+  <script>
+    let vocabulary = JSON.parse(localStorage.getItem('vocab') || '[]');
+    let xp = parseInt(localStorage.getItem('xp') || '0');
+    let streak = parseInt(localStorage.getItem('streak') || '0');
+    let currentQuestion = null;
+
+    const xpDisplay = document.getElementById('xpDisplay');
+    const gameQuestion = document.getElementById('gameQuestion');
+    const gameOptions = document.getElementById('gameOptions');
+    const result = document.getElementById('result');
+    const nextQuestion = document.getElementById('nextQuestion');
+
+    function updateXPDisplay() {
+      xpDisplay.textContent = `XP: ${xp} | 🔥 Streak: ${streak}`;
+      localStorage.setItem('xp', xp);
+      localStorage.setItem('streak', streak);
+    }
+
+    function generateQuestion() {
+      if (vocabulary.length < 4) {
+        gameQuestion.textContent = 'Add more words to your vocabulary to start playing!';
+        return;
+      }
+      const correctIndex = Math.floor(Math.random() * vocabulary.length);
+      const correctWord = vocabulary[correctIndex];
+      currentQuestion = correctWord;
+      const options = [correctWord.translation];
+      while (options.length < 4) {
+        const random = vocabulary[Math.floor(Math.random() * vocabulary.length)].translation;
+        if (!options.includes(random)) options.push(random);
+      }
+      options.sort(() => Math.random() - 0.5);
+
+      gameQuestion.textContent = `What is the Spanish translation of "${correctWord.word}"?`;
+      gameOptions.innerHTML = options.map(opt => `<button class='bg-gray-200 hover:bg-blue-300 text-gray-800 px-4 py-2 rounded-lg' onclick='checkAnswer("${opt}")'>${opt}</button>`).join('');
+      result.textContent = '';
+    }
+
+    window.checkAnswer = function(answer) {
+      if (!currentQuestion) return;
+      if (answer === currentQuestion.translation) {
+        result.textContent = '✅ Correct!';
+        xp += 10; streak += 1;
+      } else {
+        result.textContent = `❌ Wrong! The correct answer is ${currentQuestion.translation}`;
+        streak = 0;
+      }
+      updateXPDisplay();
+    }
+
+    nextQuestion.addEventListener('click', generateQuestion);
+
+    updateXPDisplay();
+    generateQuestion();
+  </script>
+</body>
+</html>
